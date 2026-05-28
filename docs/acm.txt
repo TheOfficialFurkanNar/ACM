@@ -1,0 +1,452 @@
+Affective Coherence Monitoring for
+Transformer-Based Language Models
+Furkan Nar
+furkannar168@hotmail.com
+April 12, 2026
+Abstract
+This paper presents the Affective Coherence Monitoring (ACM), a biologically
+inspired emotional intelligence engine designed for integration into transformer-
+based AI architectures. ACM provides a mathematical framework for the real-time
+analysis, regulation, and monitoring of emotional coherence in generated responses.
+The mechanism operates through a system of coupled differential equations and
+discrete modulation functions. Core emotional states are computed via a weighted
+fusion of keyword-based lexica and dense semantic embeddings derived from a
+384-dimensional sentence transformer ( all-MiniLM-L6-v2 ), where the semantic
+similarity score is defined as ssem,e = (v text·ce+ 1.0)/2.0 using normalized emotion
+centroidsc e. To model biological homeostasis, emotional states evolve according
+to exponential decay dynamicsE t+∆t =E t·e−λ·∆t, whereλis an emotion-specific
+decay tensor derived from a 4.0-second half-life.
+Cross-emotion modulation functions govern the interaction between primary affects,
+such as curiosity and joy, using piecewise additive rules with empirically defined
+thresholds (e.g., s′
+curiosity =scuriosity + 0.4·sjoywhen sjoy>0.4). The system detects
+emotional incoherence through a context mismatch detector, which computes valence
+conflict V C =min(Spos, Sneg)/(Stotal/2) and arousal disparity AD =|Ahigh−
+Alow|/max (Ahigh+Alow,0.1) to classify alert levels into Nominal, Watch, or Alert
+states. A habituation mechanism attenuates responses to repetitive stimuli via
+a frequency-based piecewise function s′
+e=f(Hscore) over a 30-second temporal
+window, preventing emotional overreaction.
+Finally, the ACM modulates the generative temperature Tgendirectly based on the
+alert level (e.g., Tgen= 0.3 for Alert states, Tgen= 0.7 for Nominal states). The
+system is designed to identify emotional incongruities such as frustrated sarcasm
+(MS <− 0.15) and emotional suppression ( AD > 0.6), enabling safer and more
+coherent language generation. This framework bridges computational affect theory
+with practical large language model safety mechanisms.
+2
+Contents
+1 Introduction 2
+2 Related Work 3
+2.1 Affective Computing . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3
+2.2 Emotion Recognition in NLP . . . . . . . . . . . . . . . . . . . . . . . . 3
+2.3 Emotional Coherence and AI Safety . . . . . . . . . . . . . . . . . . . . . 3
+3 The Affective Coherence Monitoring: Mathematical Framework 3
+3.1 Core Emotional Scoring . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+3.1.1 Emotion Fusion . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+3.1.2 Semantic Similarity Score . . . . . . . . . . . . . . . . . . . . . . 4
+3.1.3 Centroid Computation . . . . . . . . . . . . . . . . . . . . . . . . 4
+3.1.4 Valence and Arousal . . . . . . . . . . . . . . . . . . . . . . . . . 4
+3.2 Cross-Emotion Modulation . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+3.3 Context Mismatch Detection . . . . . . . . . . . . . . . . . . . . . . . . . 5
+3.3.1 Activation Sums . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+3.3.2 Valence Conflict . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+3.3.3 Arousal Disparity . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+3.3.4 Mismatch Score . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+3.3.5 Confidence Metric . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+3.4 Emotional Decay (Homeostasis) . . . . . . . . . . . . . . . . . . . . . . . 6
+3.5 Habituation Dynamics . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+3.5.1 Habituation Score . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+3.5.2 Attenuation Function . . . . . . . . . . . . . . . . . . . . . . . . . 8
+3.6 Alert Level Classification . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+3.7 Temperature Modulation . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+4 System Architecture 9
+5 Discussion 9
+5.1 Implications for AI Safety . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+5.2 Biological Grounding . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
+5.3 Limitations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
+6 Conclusion and Future Work 10
+1
+1. Introduction
+Large language models (LLMs) have achieved remarkable capabilities in natural language
+understanding and generation. Yet a persistent and underexplored challenge remains: the
+emotional coherenceof generated responses. LLMs can produce text that is semantically
+fluent while being affectively inconsistent—expressing enthusiasm when discussing tragedy,
+or exhibiting detached neutrality in emotionally charged interactions. Such incoherence
+undermines user trust, degrades the quality of human-AI interaction, and poses subtle
+but significant risks in safety-critical deployments.
+Existing approaches to affective computing in AI have largely focused onemotion recogni-
+tion—classifying the emotional content of user inputs—rather than on the regulation and
+coherence monitoring ofmodel outputs. This distinction is crucial. A model that correctly
+identifies a user’s distress but responds with emotionally incongruent language fails at the
+level of affective alignment, even if its informational content is accurate.
+This paper introduces theAffective Coherence Monitoring (ACM), a novel com-
+putational framework designed to address this gap. ACM is not a replacement for the
+underlying language model; rather, it functions as a biologically inspired regulatory layer
+that operates over the model’s generative process in real time. Drawing on principles
+from affective neuroscience—specifically emotional homeostasis, habituation, and valence-
+arousal dimensional theory [2]—ACM provides a rigorous mathematical apparatus for
+monitoring, detecting, and correcting emotional incoherence in transformer-based AI
+outputs.
+The key contributions of this work are as follows:
+1.Ahybrid emotion scoring systemthat fuses keyword-based lexical analysis with
+dense semantic embeddings, enabling robust emotion detection across both surface-level
+and latent textual features.
+2.Abiologically motivated emotional dynamics modelincorporating exponential
+decay (homeostasis) and frequency-based habituation, grounding the computational
+framework in established models of affective regulation.
+3.Acontext mismatch detectorthat quantifies valence conflict and arousal disparity
+to classify emotional incoherence into actionable alert levels.
+4.Atemperature modulation mechanismthat directly adjusts the language model’s
+generation temperature based on detected emotional state, providing a closed-loop
+feedback control system for affective coherence.
+The remainder of this paper is organized as follows. Section 2 reviews related work in
+affective computing and emotion-aware NLP. Section 3 presents the full mathematical
+specification of the ACM system. Section 4 describes the system architecture and integra-
+tion with transformer-based models. Section 5 interprets the implications for AI safety,
+and Section 6 concludes with directions for future work.
+2
+2. Related Work
+2.1 Affective Computing
+The field of affective computing, pioneered by Picard [1], established the theoretical
+and engineering foundations for systems that recognize, interpret, and simulate human
+emotions. Early work focused on physiological signal processing and facial expression
+recognition. More recent contributions have extended affective computing principles to
+text-based interaction, forming the basis for sentiment analysis and emotion recognition
+in NLP.
+The dimensional model of emotion—most notably the valence-arousal circumplex proposed
+by Russell [2]—provides a continuous, two-dimensional representation of emotional states.
+Valence captures the positive-negative axis, while arousal represents the activation level
+from calm to excited. ACM adopts this dimensional framework as its core representational
+substrate, computing both valenceVand arousalAfrom discrete emotion scores.
+2.2 Emotion Recognition in NLP
+Emotion recognition in text has advanced substantially with the development of large pre-
+trained language models. Approaches range from lexicon-based methods using resources
+such as the NRC Emotion Lexicon [3] to fine-tuned transformer models trained on
+affective corpora [4]. More recent work has explored multi-label emotion classification [5],
+recognizing that natural language frequently expresses mixed or co-occurring emotions.
+ACM integrates both paradigms: a keyword-based scoring component draws on lexical
+resources for efficiency and interpretability, while a semantic embedding component using
+theall-MiniLM-L6-v2 sentence transformer [6] captures contextual and compositional
+affective meaning that surface-level lexica miss.
+2.3 Emotional Coherence and AI Safety
+The relationship between emotional coherence and AI safety has received comparatively
+limited attention. Existing work on AI alignment has focused predominantly on value
+alignment, factual accuracy, and the prevention of harmful outputs [7]. However, affective
+misalignment—wherein a model’s emotional register is inconsistent with the context—
+represents a distinct failure mode. Emotionally incongruent responses can mislead users
+about a model’s understanding, erode trust, and in sensitive contexts such as mental
+health support, cause harm.
+The ACM system directly addresses this gap by providing a principled, mathematically
+grounded mechanism for detecting and correcting affective incoherence at the generation
+level.
+3.The Affective Coherence Monitoring: Mathematical Frame-
+work
+This section presents the complete mathematical specification of ACM. The system
+operates as a sequential pipeline: emotion scoring, cross-emotion modulation, dimensional
+3
+computation, mismatch detection, homeostatic decay, habituation, alert classification, and
+temperature modulation.
+3.1 Core Emotional Scoring
+3.1.1 Emotion Fusion
+For each emotion e∈ E ={joy, sadness, curiosity, creativity, fear, anger, surprise, disgust} ,
+the system computes a final emotion score via weighted fusion of keyword-based and
+semantic-based scores:
+se=w kw·skw,e+w sem·ssem,e (1)
+where wsem= 0.5 is the semantic weight and wkw= 1−w sem= 0.5 the keyword weight.
+The keyword score skw,eis derived from lexical matching with importance-weighted terms,
+scaled at 0.35 per match.
+3.1.2 Semantic Similarity Score
+The semantic score leverages dense sentence embeddings. Letv textdenote the L2-
+normalized embedding of the input text produced by all-MiniLM-L6-v2 (dimension
+384), and letc edenote the L2-normalized centroid embedding for emotion e. The
+semantic score is:
+ssem,e=vtext·ce+ 1.0
+2.0(2)
+Since bothv textandc eare L2-normalized, their dot product equals the cosine similarity,
+mapping the range [−1,1] to [0,1].
+3.1.3 Centroid Computation
+The emotion centroidc eis computed as a weighted mean over a set of nrepresentative
+exemplar embeddings {vi}, followed by L2 normalisation to ensure unit-norm consistency
+with Eq. (2):
+˜ce=Pn
+i=1wi·viPn
+i=1wi,c e=˜ce
+∥˜ce∥2, w i= softmax(¯s i·3.0) (3)
+where ¯si=1
+nPn
+j=1cos(vi,vj) is the mean pairwise cosine similarity (centrality score) of
+exemplar i, and the softmax temperature of 3 .0 sharpens the weighting toward more
+central exemplars.
+3.1.4 Valence and Arousal
+Following the dimensional circumplex model, ACM projects discrete emotion scores onto
+two continuous dimensions.
+Valence V∈[−1,1] captures the positive-negative axis. All eight emotions contribute:
+joy, curiosity, and creativity are positively valenced; sadness, fear, anger, and disgust
+4
+are negatively valenced; surprise carries a weak positive valence consistent with Russell’s
+circumplex [2]:
+V= clamp[−1,1]
+sjoy+0.5s curiosity +0.4s creativity +0.3s surprise−ssadness−0.8s fear−0.7s anger−0.9s disgust
+(4)
+Arousal A∈[0,1] captures activation intensity. All eight emotions contribute, including
+disgust, which carries moderate arousal in the circumplex model [2]:
+A= clamp[0,1]
+0.7s joy+0.8s curiosity +0.6s creativity +0.5s sadness +0.9s fear+0.95s anger+0.85s surprise +0.6s disgust
+(5)
+3.2 Cross-Emotion Modulation
+Emotions do not operate independently; clinical and computational affect research has
+documented systematic interactions between primary emotional states [8]. ACM models
+these interactions through piecewise additive modulation functions. The threshold values
+and interaction coefficients below are heuristically tuned initial estimates; empirical
+validation on conversational corpora is required to establish their generalisability.
+Curiosity modulation:
+s′
+curiosity =scuriosity +
+
++0.4s joy ifsjoy>0.4
+−0.5s sadness ifssadness >0.4
+−0.2s fear ifsfear>0.4
+−0.3s anger ifsanger>0.4
++0.3s surprise ifssurprise >0.5
+−0.25s disgust ifsdisgust >0.4
+0 otherwise(6)
+Creativity modulation:
+s′
+creativity =screativity +
+
++0.45s joy ifsjoy>0.4
+−0.4s sadness ifssadness >0.4
+−0.3s fear ifsfear>0.4
+−0.2s disgust ifsdisgust >0.4
++0.2 ifs curiosity >0.6
+0 otherwise(7)
+3.3 Context Mismatch Detection
+Emotional incoherence is operationalized through a context mismatch detector that
+quantifies the degree of conflict between positive and negative affective signals.
+5
+3.3.1 Activation Sums
+Spos=sjoy+ 0.4s surprise + 0.6s curiosity (8)
+Sneg=ssadness + 0.9s fear+ 0.95s anger+ 0.9s disgust (9)
+Stotal=S pos+S neg (10)
+3.3.2 Valence Conflict
+V C=min(S pos, Sneg)
+Stotal/2(11)
+V Capproaches 1 when positive and negative signals are equally strong, indicating
+maximum affective ambiguity.
+3.3.3 Arousal Disparity
+Ahigh=sfear+sanger+ssurprise + 0.7s joy (12)
+Alow=ssadness + 0.5s disgust (13)
+AD=|Ahigh−A low|
+max(A high+A low,0.1)(14)
+High ADvalues indicate co-activation of high- and low-arousal states, a signature of
+emotional suppression.
+3.3.4 Mismatch Score
+MS=
+
+0 ifS total= 0
+clamp[−1,1]Spos−S neg
+Stotal·(1 + 0.5·V C)
+otherwise(15)
+3.3.5 Confidence Metric
+C= min(S total·V C·1.5,1.0) (16)
+3.4 Emotional Decay (Homeostasis)
+Biological affective systems exhibit homeostatic regulation: emotional states naturally
+decay toward a resting baseline over time [9]. ACM models this via exponential decay:
+Et+∆t=E t·e−λ·∆t(17)
+where Etis the emotion state vector at time t, ∆tis elapsed time in seconds, and λis an
+emotion-specific decay rate tensor:
+λi=di·ln 2
+t1/2, t 1/2= 4.0 seconds (18)
+6
+The half-life of t1/2= 4.0 seconds is chosen to operate at the timescale of a single
+conversational turn rather than the longer timescales of sustained emotion studied in
+psychophysiology [9]; it governs how quickly a prior turn’s emotional signature fades
+before the next input arrives. Empirical calibration against human annotation data is a
+priority for future work.
+Emotion-specific decay factors diare tabulated in Table 1. The relative ordering reflects
+differential persistence reported in affective psychology (e.g., surprise dissipates rapidly;
+sadness and anger are more sustained [8]), though the exact magnitudes are heuristic and
+should be validated empirically.
+Table 1: Emotion-specific decay factorsd i(heuristic; pending empirical validation)
+Emotion Decay Factord i
+Joy 1.00
+Sadness 1.20
+Curiosity 0.90
+Creativity 0.95
+Fear 1.10
+Anger 1.15
+Surprise 0.80
+Disgust 1.05
+The state integration equation blends historical and new emotional signals:
+Enew= clamp[0,1](0.4·E current + 0.6·P new) (19)
+where Pnewis the incoming emotion pulse. The 60/40 weighting prioritizes recent input
+while preserving conversational continuity.
+3.5 Habituation Dynamics
+Habituation—the attenuation of response to repeated stimuli—is a fundamental property
+of biological nervous systems [10]. ACM implements a frequency-sensitive attenuation
+mechanism over a 30-second temporal window.
+3.5.1 Habituation Score
+Hscore=Ne· |se−E current,e |
+Th(20)
+where Th= 5 is the habituation threshold, Neis the count of emotion eactivations within
+the window, and Ecurrent,e is the scalar component of the current state vector corresponding
+to emotion e.Hscoreincreases with the number of activations, consistent with the biological
+principle that repeated stimulation produces stronger response attenuation [10].
+7
+3.5.2 Attenuation Function
+s′
+e=
+
+min1
+1 +H score·se,0.5·s e
+ifH score>1.0
+se·(1−0.3·H score) if 0.5< H score≤1.0
+se ifH score≤0.5(21)
+The piecewise structure provides graduated attenuation: mild habituation applies lin-
+ear dampening, while strong habituation applies a more aggressive saturation-based
+suppression that scales with both habituation level and current score magnitude.
+3.6 Alert Level Classification
+ACM classifies the emotional state into one of three alert levels based on the computed
+mismatch and conflict scores:
+Alert =
+
+AlertifMS≥0.60 orST=emotional suppression
+WatchifMS≥0.35 orV C≥0.40
+Nominalotherwise(22)
+The system additionally classifies the affective state type ( ST) based on the sign and
+magnitude of MSandAD. These labels are operationally defined within this framework
+and are not direct detectors of sarcasm or suppression in the full pragmatic sense; they
+identify distributional patterns in the emotion scores that areconsistent withsuch states
+and warrant closer scrutiny during generation:
+•Frustrated sarcasm( MS <− 0.15): dominance of negative activation; surface
+expression may be incongruently positive.
+•Playful sarcasm( MS > 0.15): dominance of positive activation with contextually
+incongruent framing.
+•Emotional suppression(AD >0.6): co-activation of high- and low-arousal states.
+•Congruent: emotionally coherent, no significant mismatch detected.
+3.7 Temperature Modulation
+ACM provides closed-loop feedback control over the language model’s generation temper-
+atureT gen:
+Tgen=
+
+0.3 if Alert =Alert
+0.4 if Alert =WatchandST=frustrated sarcasm
+0.5 if Alert =Watch
+0.7 if Alert =Nominal(23)
+Lower temperatures suppress stochastic variation in generation, reducing the probability of
+confabulated or affectively incoherent outputs under high-alert conditions. Under nominal
+emotional coherence, higher temperatures permit more natural, expressive generation.
+8
+The assumed relationship between generation temperature and affective coherence is
+an empirical hypothesis that requires systematic validation; this is discussed further in
+Section 5.
+4. System Architecture
+ACM is designed as a modular, non-invasive layer that wraps around a transformer-based
+language model. The integration follows a sequential pipeline architecture, summarized
+below.
+Step 1 — Input Processing.The model’s candidate response is tokenized. Keyword
+scores skw,eare computed via lexical matching against importance-weighted emotion
+dictionaries (keyword importance multipliers range from 0 .85 for curiosity to 0 .95 for joy).
+Semantic scoress sem,eare computed via Eq. (2).
+Step 2 — Emotion Fusion.Scores are fused via Eq. (1)and cross-modulated via
+Eqs. (6)–(7).
+Step 3 — Dimensional Computation.Valence Vand arousal Aare computed via
+Eqs. (4)–(5).
+Step 4 — Mismatch Detection.The context mismatch detector computes V C,AD,
+MS, andCvia Eqs. (11)–(16).
+Step 5 — Homeostatic Decay.Stored emotional state is updated via Eq. (17), then
+integrated with the new pulse via Eq. (19).
+Step 6 — Habituation.Frequency-based attenuation is applied via Eq. (21) within a
+30-second sliding window.
+Step 7 — Alert Classification.Alert level and affective state type are determined via
+Eq. (22).
+Step 8 — Temperature Modulation.T genis set via Eq. (23).
+Step 9 — Feedback Loop.If Alert ̸=Nominal, the system triggers regeneration (up
+toMAXACMRETRIES = 2 attempts) with the adjusted temperature. The emotional state
+is maintained across conversation turns, enabling long-horizon affective coherence.
+5. Discussion
+5.1 Implications for AI Safety
+The ACM framework addresses a class of AI failure modes that existing safety mechanisms
+largely overlook:affective misalignment. While current alignment research has made
+significant strides in reducing harmful outputs and improving factual accuracy, the
+emotional register of AI responses has received comparatively little formal treatment.
+Emotionally incoherent AI responses can be harmful in subtle but meaningful ways. In
+mental health support contexts, a model that responds to expressions of distress with
+affectively neutral or inappropriately positive language may fail to validate the user’s emo-
+tional state, potentially worsening outcomes. In educational or therapeutic applications,
+9
+sustained affective incoherence may erode user trust and reduce the effectiveness of the
+interaction.
+ACM’s temperature modulation mechanism provides a principled, mathematically grounded
+intervention: by reducing generative stochasticity under conditions of detected emotional
+incoherence, the system constrains the model toward more conservative, contextually
+appropriate outputs. This represents a novel contribution to the AI safety toolkit—a form
+ofaffective guardrailingthat operates at the generation level.
+5.2 Biological Grounding
+A distinctive feature of ACM is its deliberate grounding in biological models of emotion.
+The exponential decay model (Eq. (17)) mirrors established psychophysiological models of
+emotional recovery [9]. The habituation mechanism (Eq. (21)) instantiates a core principle
+of neural adaptation [10]. The valence-arousal dimensional representation draws directly
+on Russell’s circumplex model [2].
+This biological grounding is not merely cosmetic. It provides principled constraints on
+parameter choices and offers a theoretical framework for interpreting the system’s behavior
+in terms of established affective science.
+5.3 Limitations
+Several limitations warrant acknowledgment. First, the current implementation relies on a
+fixed set of eight emotion categories; affective states in natural language are considerably
+more nuanced and culturally variable. Second, the keyword lexicon and modulation
+thresholds are heuristically tuned and may not generalize uniformly across domains or
+languages; comprehensive empirical validation on annotated conversational datasets is
+required to establish their validity. Third, the semantic embedding component, while
+powerful, inherits any biases present in the pre-training data of all-MiniLM-L6-v2 [6].
+Fourth, the half-life parameter ( t1/2= 4.0 s) and the emotion-specific decay factors
+in Table 1 are initial estimates chosen to operate at conversational-turn timescales;
+they do not directly correspond to the longer-horizon emotional dynamics studied in
+psychophysiology and require empirical calibration. Finally, the temperature modulation
+mechanism assumes a direct relationship between generation temperature and affective
+coherence that merits rigorous empirical validation—reducing temperature constrains the
+output distribution but does not guarantee improved emotional appropriateness.
+6. Conclusion and Future Work
+This paper has presented the Affective Coherence Monitoring (ACM), a biologically
+inspired mathematical framework for the real-time monitoring, detection, and regulation
+of emotional coherence in transformer-based AI systems. ACM integrates hybrid emotion
+scoring, dimensional valence-arousal computation, cross-emotion modulation, context
+mismatch detection, homeostatic decay, habituation dynamics, alert classification, and
+closed-loop temperature modulation into a unified, principled pipeline.
+The framework bridges computational affect theory with practical LLM safety mechanisms,
+contributing a novel dimension to the AI alignment toolkit.
+10
+Future work will pursue several directions. A comprehensive quantitative evaluation
+across diverse conversational benchmarks will establish formal performance metrics and
+provide the empirical grounding needed to validate the heuristic parameters introduced
+in this paper. Extension of the emotion taxonomy beyond the current eight categories
+will improve expressive coverage. Multilingual adaptation of the keyword lexicon and
+centroid embeddings will broaden applicability. Finally, integration studies with different
+transformer architectures will assess the generality of the ACM approach.
+The ACM represents a step toward AI systems that are not merely factually accurate and
+safe, butaffectively coherent—capable of engaging with human emotional experience in a
+manner that is consistent, appropriate, and trustworthy.
+References
+[1] R. W. Picard,Affective Computing. MIT Press, Cambridge, MA, 1997.
+[2]J. A. Russell, “A circumplex model of affect,”Journal of Personality and Social
+Psychology, vol. 39, no. 6, pp. 1161–1178, 1980.
+[3]S. M. Mohammad and P. D. Turney, “Crowdsourcing a word-emotion association
+lexicon,”Computational Intelligence, vol. 29, no. 3, pp. 436–465, 2013.
+[4]J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova, “BERT: Pre-training of deep bidi-
+rectional transformers for language understanding,” inProc. NAACL-HLT, pp. 4171–
+4186, 2019.
+[5]D. Demszky, D. Movshovitz-Attias, J. Ko, A. Cowen, G. Nemade, and S. Ravi,
+“GoEmotions: A dataset of fine-grained emotions,” inProc. ACL, pp. 4040–4054,
+2020.
+[6]Hugging Face, “ sentence-transformers/all-MiniLM-L6-v2 : A sentence-
+transformers model mapping sentences to a 384-dimensional dense vector space,”
+Hugging Face Model Hub, 2021. [Online]. Available: https://huggingface.co/
+sentence-transformers/all-MiniLM-L6-v2
+[7]Y. Bai et al., “Constitutional AI: Harmlessness from AI feedback,”arXiv preprint
+arXiv:2212.08073, 2022.
+[8] R. S. Lazarus,Emotion and Adaptation. Oxford University Press, New York, 1991.
+[9] N. H. Frijda,The Emotions. Cambridge University Press, Cambridge, 1986.
+[10]R. F. Thompson and W. A. Spencer, “Habituation: A model phenomenon for the
+study of neuronal substrates of behavior,”Psychological Review, vol. 73, no. 1,
+pp. 16–43, 1966.
+11

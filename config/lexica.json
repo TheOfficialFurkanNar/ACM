@@ -1,0 +1,13 @@
+{
+  "emotion_words": {
+    "happy": ["happy", "joy", "excited", "love", "wonderful", "great", "amazing", "fantastic", "delighted", "cheerful", "pleased", "glad", "thrilled"],
+    "sad": ["sad", "unhappy", "depressed", "miserable", "grief", "sorrow", "heartbroken", "devastated", "lonely", "empty", "crying", "tears"],
+    "curious": ["curious", "wonder", "why", "how", "what if", "explore", "discover", "investigate", "question", "intrigued", "fascinated", "interested"],
+    "creative": ["create", "imagine", "design", "innovative", "artistic", "original", "inventive", "craft", "build", "compose", "brainstorm", "envision"],
+    "fear": ["fear", "scared", "afraid", "terrified", "anxious", "worried", "panic", "frightened", "dread", "nervous", "threat", "danger", "risk"],
+    "anger": ["angry", "mad", "furious", "rage", "frustrated", "irritated", "outraged", "livid", "annoyed", "resentful", "hostile", "aggressive", "infuriated"],
+    "surprise": ["surprise", "shocked", "unexpected", "amazed", "astonished", "startled", "stunned", "bewildered", "wow", "unbelievable", "unforeseen", "sudden"],
+    "disgust": ["disgust", "gross", "revolting", "repulsive", "nauseating", "sickening", "vile", "offensive", "repellent", "distasteful", "appalling", "foul"],
+    "general": ["think", "believe", "know", "understand", "consider", "seem", "appear"]
+  }
+}

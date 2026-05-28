@@ -1,0 +1,9 @@
+# Core dependencies for Affective Coherence Monitoring (ACM)
+# Python 3.8 or higher required
+
+torch>=2.0.0
+sentence-transformers>=2.2.0
+
+# Optional: for building anchors from GoEmotions dataset
+datasets>=2.14.0
+pandas>=2.0.0
