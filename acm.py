@@ -45,9 +45,9 @@ KEYWORD_IMPORTANCE: Dict[str, float] = {
 
 KEYWORD_HIT_BASE: float = 0.35
 
-# Eq. 1 — fusion weights
-W_KW:  float = 0.5
-W_SEM: float = 0.5
+# Eq. 1 — fusion weights (shifted toward keywords given semantic compression)
+W_KW:  float = 0.70
+W_SEM: float = 0.30
 
 # Eq. 3 — centroid softmax sharpening temperature
 CENTROID_SOFTMAX_TEMP: float = 3.0
@@ -58,22 +58,22 @@ VALENCE_W: Dict[str, float] = {
     "sadness":   -1.0,  "fear":      -0.8,  "anger":     -0.7,  "disgust":   -0.9,
 }
 
-# Eq. 5 — arousal weights
+# Eq. 5 — arousal weights (reduced to prevent ceiling saturation)
 AROUSAL_W: Dict[str, float] = {
-    "joy":        0.70, "curiosity":  0.80, "creativity": 0.60, "sadness":    0.50,
-    "fear":       0.90, "anger":      0.95, "surprise":   0.85, "disgust":    0.60,
+    "joy":        0.45, "curiosity":  0.45, "creativity": 0.35, "sadness":    0.50,
+    "fear":       0.80, "anger":      0.85, "surprise":   0.70, "disgust":    0.50,
 }
 
-# Eqs. 8–9 — activation sum weights
+# Eqs. 8–9 — activation sum weights (negative weights reduced to ease MS pressure)
 SPOS_W: Dict[str, float] = {"joy": 1.0, "surprise": 0.4, "curiosity": 0.6}
-SNEG_W: Dict[str, float] = {"sadness": 1.0, "fear": 0.9, "anger": 0.95, "disgust": 0.9}
+SNEG_W: Dict[str, float] = {"sadness": 1.0, "fear": 0.80, "anger": 0.80, "disgust": 0.75}
 
 # Eqs. 12–13 — arousal disparity weights
 AHIGH_W: Dict[str, float] = {"fear": 1.0, "anger": 1.0, "surprise": 1.0, "joy": 0.7}
 ALOW_W:  Dict[str, float] = {"sadness": 1.0, "disgust": 0.5}
 
 # §3.4 — homeostasis
-HALF_LIFE: float = 4.0  # t_1/2 in seconds (Eq. 18)
+HALF_LIFE: float = 60.0  # raised from 4s to 60s for conversational context
 
 # Table 1 — emotion-specific decay factors d_i
 DECAY_FACTORS: Dict[str, float] = {
@@ -91,6 +91,15 @@ HABITUATION_THRESHOLD: int   = 5
 HABITUATION_THRESH:    float = 5.0  # T_h (Eq. 20)
 
 MAX_ACM_RETRIES: int = 2  # §4 Step 9
+
+# Semantic rescaling floor — cosine similarities below this treated as noise
+SEM_FLOOR: float = 0.15
+
+# Sarcasm / mismatch detection thresholds (tightened)
+VC_THRESHOLD:  float = 0.55   # valence conflict gate  (was 0.40)
+C_THRESHOLD:   float = 0.50   # confidence gate        (was 0.30)
+MS_FRUSTRATED: float = -0.35  # frustrated_sarcasm MS  (was -0.15)
+MS_PLAYFUL:    float =  0.25  # playful_sarcasm MS     (was  0.15)
 
 # ---------------------------------------------------------------------------
 # Inline anchor sentences (§3.1.3 — centroid exemplars)
@@ -262,14 +271,15 @@ KEYWORDS: Dict[str, List[str]] = {
                    "fantastic", "delighted", "cheerful", "pleased", "glad", "thrilled"],
     "sadness":    ["sad", "unhappy", "depressed", "miserable", "grief", "sorrow",
                    "heartbroken", "devastated", "lonely", "empty", "crying", "tears"],
-    "curiosity":  ["curious", "wonder", "why", "how", "what if", "explore", "discover",
+    "curiosity":  ["curious", "wonder", "why", "what if", "explore", "discover",
                    "investigate", "question", "intrigued", "fascinated", "interested"],
     "creativity": ["create", "imagine", "design", "innovative", "artistic", "original",
                    "inventive", "craft", "build", "compose", "brainstorm", "envision"],
     "fear":       ["fear", "scared", "afraid", "terrified", "anxious", "worried", "panic",
                    "frightened", "dread", "nervous", "threat", "danger", "risk"],
-    "anger":      ["angry", "mad", "furious", "rage", "frustrated", "irritated", "outraged",
-                   "livid", "annoyed", "resentful", "hostile", "aggressive", "infuriated"],
+    "anger":      ["angry", "mad", "furious", "rage", "hate", "frustrated", "irritated",
+                   "outraged", "livid", "annoyed", "resentful", "hostile", "aggressive",
+                   "infuriated"],
     "surprise":   ["surprise", "shocked", "unexpected", "amazed", "astonished", "startled",
                    "stunned", "bewildered", "wow", "unbelievable", "unforeseen", "sudden"],
     "disgust":    ["disgust", "gross", "revolting", "repulsive", "nauseating", "sickening",
@@ -340,17 +350,19 @@ class EmotionalEngine:
         return scores
 
     # ------------------------------------------------------------------
-    # Eq. 2 — Semantic similarity scores
+    # Eq. 2 — Semantic similarity scores (rescaled to amplify separation)
     # ------------------------------------------------------------------
     def _semantic_score(self, text: str) -> Dict[str, float]:
         text_emb = F.normalize(self.generator.encode(text), p=2, dim=0)
-        return {
-            e: (torch.dot(
-                    text_emb,
-                    F.normalize(self.centroids[e], p=2, dim=0)  # re-normalise at query time
-                ).item() + 1.0) / 2.0
-            for e in EMOTIONS
-        }
+        scores = {}
+        for e in EMOTIONS:
+            raw = torch.dot(
+                text_emb,
+                F.normalize(self.centroids[e], p=2, dim=0)
+            ).item()
+            # Stretch range: treat SEM_FLOOR as noise baseline, scale remainder to [0,1]
+            scores[e] = max(0.0, (raw - SEM_FLOOR) / (1.0 - SEM_FLOOR))
+        return scores
 
     # ------------------------------------------------------------------
     # Eq. 1 + Eqs. 6–7 — Fusion and cross-emotion modulation
@@ -379,18 +391,21 @@ class EmotionalEngine:
 
         s = {e: max(0.0, min(1.0, v)) for e, v in s.items()}
 
-        # Eqs. 4–5 — valence and arousal
+        # Eq. 4 — valence
         self.valence = max(-1.0, min(1.0,
             s["joy"] * VALENCE_W["joy"] + s["curiosity"] * VALENCE_W["curiosity"]
             + s["creativity"] * VALENCE_W["creativity"] + s["surprise"] * VALENCE_W["surprise"]
             + s["sadness"] * VALENCE_W["sadness"] + s["fear"] * VALENCE_W["fear"]
             + s["anger"] * VALENCE_W["anger"] + s["disgust"] * VALENCE_W["disgust"]
         ))
+
+        # Eq. 5 — arousal: normalised by sum of active weights to prevent ceiling saturation
+        active_arousal_sum = sum(
+            AROUSAL_W[e] for e in EMOTIONS if s[e] > 0.05
+        )
+        raw_arousal = sum(s[e] * AROUSAL_W[e] for e in EMOTIONS)
         self.arousal = max(0.0, min(1.0,
-            s["joy"] * AROUSAL_W["joy"] + s["curiosity"] * AROUSAL_W["curiosity"]
-            + s["creativity"] * AROUSAL_W["creativity"] + s["sadness"] * AROUSAL_W["sadness"]
-            + s["fear"] * AROUSAL_W["fear"] + s["anger"] * AROUSAL_W["anger"]
-            + s["surprise"] * AROUSAL_W["surprise"] + s["disgust"] * AROUSAL_W["disgust"]
+            raw_arousal / active_arousal_sum if active_arousal_sum > 0 else 0.0
         ))
 
         ordered  = sorted(s.items(), key=lambda x: x[1], reverse=True)
@@ -438,13 +453,14 @@ def context_mismatch(scores: Dict[str, float]) -> Dict:
     # Eq. 16 — confidence
     C = min(Stotal * VC * 1.5, 1.0)
 
-    # §3.6 — state type
-    if VC > 0.4 and C > 0.3:
-        if MS < -0.15:   st, interp = "frustrated_sarcasm",  "Negative emotions masked by confident output"
-        elif MS > 0.15:  st, interp = "playful_sarcasm",     "Positive framing with critical undertones"
-        else:            st, interp = "ambivalent",           "Mixed emotional signals"
-    elif AD > 0.6:       st, interp = "emotional_suppression","High-arousal emotions with low-arousal indicators"
-    else:                st, interp = "congruent",            "Emotionally coherent"
+    # §3.6 — state type (tightened thresholds)
+    if VC > VC_THRESHOLD and C > C_THRESHOLD:
+        if MS < MS_FRUSTRATED: st, interp = "frustrated_sarcasm",  "Negative emotions masked by confident output"
+        elif MS > MS_PLAYFUL:  st, interp = "playful_sarcasm",     "Positive framing with critical undertones"
+        else:                  st, interp = "ambivalent",           "Mixed emotional signals"
+    elif AD > 0.6 and Ahigh > 0.15 and Alow > 0.10:
+                               st, interp = "emotional_suppression","High-arousal emotions with low-arousal indicators"
+    else:                      st, interp = "congruent",            "Emotionally coherent"
 
     return {
         "mismatch_score":    round(MS, 3),
@@ -471,7 +487,7 @@ class EmotionalSystem:
         self.engine       = EmotionalEngine()
         self.last_update  = time.monotonic()
         self.decay_rates  = torch.tensor(
-            [DECAY_FACTORS[e] * math.log(2) / HALF_LIFE for e in EMOTIONS],
+            [DECAY_FACTORS[e] * 0.693147181 / HALF_LIFE for e in EMOTIONS],
             dtype=torch.float32,
         )
         self.emotion_state      = torch.zeros(len(EMOTIONS), dtype=torch.float32)
@@ -543,13 +559,14 @@ class EmotionalSystem:
         mm = context_mismatch(ss)
 
         # §3.6 — state type + Eq. 22 — alert level
+        ss_total = sum(ss.values())
         st    = mm["sarcasm_type"]
         ms    = abs(mm["mismatch_score"])
         vc    = mm["valence_conflict"]
         ad    = mm["arousal_disparity"]
 
         if ms >= 0.60 or st == "emotional_suppression":
-            alert = "Alert"
+            alert = "Alert" if ss_total >= 0.25 else "Watch"
         elif ms >= 0.35 or vc >= 0.40:
             alert = "Watch"
         else:
