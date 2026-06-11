@@ -80,3 +80,7 @@ cd ACM
 
 # Install dependencies
 pip install requirements.txt
+
+#DOIs
+Experiment: https://doi.org/10.5281/zenodo.20571731
+Original preprint: https://doi.org/10.5281/zenodo.20427605
